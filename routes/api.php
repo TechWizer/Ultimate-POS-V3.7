@@ -39,7 +39,8 @@ Route::get('/chekCashRegister/view/{id}/{user_id}', 'APIController@getCloseRegis
 Route::post('/openRegister', 'APIController@openRegister');
 Route::get('/getDefalutCustomer/{business_id}', 'APIController@getWalkInCustomer');
 Route::get('/getcustomers', 'APIController@getCustomers');
-Route::get('/getcustomers/all/{business_id}', 'APIController@getAllCustomers');
+// Route::get('/getcustomers/all/{business_id}', 'APIController@getAllCustomers');
+Route::get('/getcustomers/all', 'APIController@getAllCustomers');
 
 Route::get('/getsuppliers', 'APIController@getSuppliers');
 Route::get('/products/list', 'APIController@getProducts');
@@ -65,6 +66,8 @@ Route::get('get/payment/accounts/{business_id}', 'APIController@getPaymentAccoun
 Route::get('get/customer-group/{business_id}/{customer_id}', 'APIController@getCustomerGroup');
 // get customer coin points
 Route::get('get/customer/coin-points/{business_id}/{contact_id}', 'APIController@getCustomerCoinPoints');
+// get selling price groups
+Route::get('get/selling/price/groups', 'APIController@getSellingPriceGroups');
 
 // barcode api routes
 Route::get('products', [BarcodeController::class, 'allProducts']);

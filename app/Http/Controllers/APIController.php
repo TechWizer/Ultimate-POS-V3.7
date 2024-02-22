@@ -37,7 +37,7 @@ use App\Utils\TransactionUtil;
 
 use Illuminate\Support\Facades\Storage;
 use App\Utils\Util;
-
+use App\VariationGroupPrice;
 
 class APIController extends Controller
 {
@@ -60,8 +60,7 @@ class APIController extends Controller
         ModuleUtil $moduleUtil,
         Util $commonUtil,
         NotificationUtil $notificationUtil
-    )
-    {
+    ) {
         $this->cashRegisterUtil = $cashRegisterUtil;
         $this->payment_types = ['cash' => 'Cash', 'card' => 'Card', 'cheque' => 'Cheque', 'bank_transfer' => 'Bank Transfer', 'other' => 'Other'];
         $this->contactUtil = $contactUtil;
@@ -139,10 +138,10 @@ class APIController extends Controller
     public function saveRegisterExpense(Request $request)
     {
 
+
         $data = RegisterExpense::create($request->all());
 
         return "SAVED";
-
     }
 
     public function TotalRegisterExpense($id)
@@ -150,7 +149,6 @@ class APIController extends Controller
 
         $total = RegisterExpense::where('cash_register_id', $id)->sum('amount');
         return $total;
-
     }
 
     public function ViewRegisterExpense($id)
@@ -159,7 +157,6 @@ class APIController extends Controller
         $data = RegisterExpense::where('cash_register_id', $id)->get();
 
         return $data;
-
     }
 
     public function getCloseRegister($id, $user_id)
@@ -171,7 +168,6 @@ class APIController extends Controller
         $details = $this->cashRegisterUtil->getRegisterTransactionDetails($user_id, $open_time, $close_time);
 
         return $register_details;
-
     }
 
 
@@ -197,10 +193,10 @@ class APIController extends Controller
                 'type' => 'credit',
                 'transaction_type' => 'initial'
             ]);
-            // return "DONE";
+            return "DONE";
         } catch (\Exception $e) {
 
-            return $e;
+            //return $e;
             return "eror";
         }
     }
@@ -263,10 +259,20 @@ class APIController extends Controller
         return $contacts;
     }
 
-    public function getAllCustomers($business_id)
+    public function getAllCustomers(Request $request)
     {
 
+        $business_id = $request->get('business_id');
+        $user_id = $request->get('user_id');
+
         $contacts = Contact::where('business_id', $business_id);
+
+        $selected_contacts = User::isSelectedContacts($user_id);
+        if ($selected_contacts) {
+            $contacts->join('user_contact_access AS uca', 'contacts.id', 'uca.contact_id')
+                ->where('uca.user_id', $user_id);
+        }
+
         $contacts = $contacts->select(
             'contacts.id',
             DB::raw("IF(contacts.contact_id IS NULL OR contacts.contact_id='', name, CONCAT(name, ' (', contacts.contact_id, ')')) AS text"),
@@ -275,14 +281,23 @@ class APIController extends Controller
             'city',
             'state',
             'pay_term_number',
-            'pay_term_type'
+            'pay_term_type',
+            'balance',
+            'total_rp',
+            'total_rp_used',
+            'total_rp_expired',
+            'total_coins'
         )
             ->onlyCustomers()
-            ->get()
-            ->toArray();
+            ->get();
+
+        foreach ($contacts as $contact) {
+            $contact->customer_group = $this->contactUtil->getCustomerGroup($business_id, $contact['id']);
+        }
+
+        $contacts->toArray();
 
         return $contacts;
-
     }
 
     public function getSuppliers(Request $request)
@@ -428,9 +443,13 @@ class APIController extends Controller
 
             $product_quantity_discount_prices = ProductQuantityDiscountPrice::where('product_id', $single_result->product_id)->get();
             $single_result['product_quantity_discount_prices'] = 'NA';
-            if (!empty($product_quantity_discount_prices)){
+            if (!empty($product_quantity_discount_prices)) {
                 $single_result['product_quantity_discount_prices'] = $product_quantity_discount_prices;
             }
+
+            $single_result['sub_units'] = $this->productUtil->getSubUnitsForUnit($single_result->unit_id, $business_id);
+            $single_result['variation_group_prices'] = VariationGroupPrice::where('variation_id', $single_result->variation_id)
+                ->select('id', 'variation_id', 'price_group_id', 'price_inc_tax')->get();
         }
 
         return json_encode($result);
@@ -516,7 +535,7 @@ class APIController extends Controller
         return json_encode($result);
     }
 
-//    STORE POS PRODUCT
+    //    STORE POS PRODUCT
     public function storeProduct(Request $request)
     {
         try {
@@ -564,7 +583,9 @@ class APIController extends Controller
 
             DB::commit();
         } catch (\Exception $e) {
+
             DB::rollBack();
+
             \Log::emergency("File:" . $e->getFile() . "Line:" . $e->getLine() . "Message:" . $e->getMessage());
             $product = "ERROR";
         }
@@ -758,6 +779,8 @@ class APIController extends Controller
             }
         } catch (\Exception $e) {
             DB::rollBack();
+            $error = "File:" . $e->getFile() . "Line:" . $e->getLine() . "Message:" . $e->getMessage();
+            dd($error);
 
             \Log::emergency("File:" . $e->getFile() . "Line:" . $e->getLine() . "Message:" . $e->getMessage());
             $msg = trans("messages.something_went_wrong");
@@ -956,9 +979,7 @@ class APIController extends Controller
 
             $output = "SAVED";
         } catch (\Exception $e) {
-
             DB::rollBack();
-            dd($e);
             \Log::emergency("File:" . $e->getFile() . "Line:" . $e->getLine() . "Message:" . $e->getMessage());
 
             $output = $e;
@@ -1020,7 +1041,7 @@ class APIController extends Controller
         return $sells;
     }
 
-//    check business reward points enables
+    //    check business reward points enables
     public function getBusinessRewardPointSettings($business_id)
     {
         try {
@@ -1037,11 +1058,10 @@ class APIController extends Controller
                 ->first();
             return $business;
         } catch (\Exception $e) {
-
         }
     }
 
-//    get customer reward points
+    //    get customer reward points
     public function getCustomerRewardPoints($business_id, $id)
     {
         try {
@@ -1054,8 +1074,7 @@ class APIController extends Controller
                 )
                 ->first();
             return $reward_points;
-        }catch (\Exception $e){
-
+        } catch (\Exception $e) {
         }
     }
 
@@ -1064,11 +1083,11 @@ class APIController extends Controller
     {
         try {
             $coin_points = Contact::where([['id', $contact_id], ['business_id', $business_id]])
-            ->select(
-                'total_coins',
-                'total_coins_used'
-            )
-            ->first();
+                ->select(
+                    'total_coins',
+                    'total_coins_used'
+                )
+                ->first();
             return $coin_points;
         } catch (\Throwable $th) {
             //throw $th;
@@ -1078,32 +1097,32 @@ class APIController extends Controller
 
     public function getPaymentAccounts($business_id)
     {
-        return Account::forDropdown($business_id,false, true);
+        return Account::forDropdown($business_id, false, true);
     }
-    
+
     public function getCustomerInvoices(Request $request, $id)
     {
         $contact_id = $id;
         $business_id = $request->get('business_id');
         $location_id = $request->get('location_id');
         $product_id = $request->get('product_id');
-        $customer_latest_invoices = Transaction::
-            join('transaction_sell_lines', 'transaction_sell_lines.transaction_id', '=', 'transactions.id')
+        $customer_latest_invoices = Transaction::join('transaction_sell_lines', 'transaction_sell_lines.transaction_id', '=', 'transactions.id')
             ->join('products', 'transaction_sell_lines.product_id', '=', 'products.id')
-            ->where([['transactions.business_id', $business_id], ['transactions.location_id', $location_id], 
-                    ['transactions.contact_id', $contact_id], ['transaction_sell_lines.product_id', $product_id]])
+            ->where([
+                ['transactions.business_id', $business_id], ['transactions.location_id', $location_id],
+                ['transactions.contact_id', $contact_id], ['transaction_sell_lines.product_id', $product_id]
+            ])
             ->select(
-                'transactions.id', 
-                'transactions.invoice_no', 
-                'transaction_sell_lines.unit_price_inc_tax', 
+                'transactions.id',
+                'transactions.invoice_no',
+                'transaction_sell_lines.unit_price_inc_tax',
                 'products.name'
-                )
+            )
             ->groupBy('transactions.id')
             ->orderBy('transactions.id', 'desc')
             ->limit(3)
             ->get();
-            return $customer_latest_invoices;
-
+        return $customer_latest_invoices;
     }
 
     public function getCustomerGroup($business_id, $customer_id)
@@ -1111,5 +1130,9 @@ class APIController extends Controller
         return $this->contactUtil->getCustomerGroup($business_id, $customer_id);
     }
 
-
+    public function getSellingPriceGroups(Request $request)
+    {
+        $business_id = $request->get('business_id');
+        return SellingPriceGroup::where([['business_id', $business_id], ['is_active', true]])->select('id', 'name')->get();
+    }
 }
