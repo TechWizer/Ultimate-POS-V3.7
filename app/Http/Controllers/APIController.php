@@ -599,7 +599,6 @@ class APIController extends Controller
     //STORE POS DATA
     public function storePos(Request $request)
     {
-
         $is_direct_sale = true;
         if (!empty($request->input('is_direct_sale'))) {
             $is_direct_sale = true;
@@ -609,7 +608,7 @@ class APIController extends Controller
             $input = $request->all();
 
             $input['is_quotation'] = 0;
-            
+
             if (!empty($input['products'])) {
                 $business_id = $request->get('business_id');
 

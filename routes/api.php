@@ -70,8 +70,8 @@ Route::get('get/customer/coin-points/{business_id}/{contact_id}', 'APIController
 Route::get('get/selling/price/groups', 'APIController@getSellingPriceGroups');
 
 // barcode api routes
-// Route::get('products', [BarcodeController::class, 'allProducts']);
+Route::get('products', [BarcodeController::class, 'allProducts']);
 
-// Route::get('business', [BarcodeController::class, 'getBusiness']);
+Route::get('business', [BarcodeController::class, 'getBusiness']);
 
-// Route::get('purchase', [BarcodeController::class, 'purchases']);
+Route::get('purchase', [BarcodeController::class, 'purchases']);
