@@ -345,114 +345,118 @@ class APIController extends Controller
 
     public function getAllProducts(Request $request)
     {
+        try {
+            $term = request()->get('term');
+            $location_id = request()->get('location_id');
 
-        $term = request()->get('term');
-        $location_id = request()->get('location_id');
+            $check_qty = request()->get('check_qty');
 
-        $check_qty = request()->get('check_qty');
+            $price_group_id = request()->get('price_group');
 
-        $price_group_id = request()->get('price_group');
+            $business_id = request()->get('business_id');
 
-        $business_id = request()->get('business_id');
+            $products = Product::join('variations', 'products.id', '=', 'variations.product_id')
+                ->active()
+                ->whereNull('variations.deleted_at')
+                ->leftjoin('units as U', 'products.unit_id', '=', 'U.id')
+                ->leftjoin(
+                    'variation_location_details AS VLD',
+                    function ($join) use ($location_id) {
+                        $join->on('variations.id', '=', 'VLD.variation_id');
 
-        $products = Product::join('variations', 'products.id', '=', 'variations.product_id')
-            ->active()
-            ->whereNull('variations.deleted_at')
-            ->leftjoin('units as U', 'products.unit_id', '=', 'U.id')
-            ->leftjoin(
-                'variation_location_details AS VLD',
-                function ($join) use ($location_id) {
-                    $join->on('variations.id', '=', 'VLD.variation_id');
-
-                    //Include Location
-                    if (!empty($location_id)) {
-                        $join->where(function ($query) use ($location_id) {
-                            $query->where('VLD.location_id', '=', $location_id);
-                            //Check null to show products even if no quantity is available in a location.
-                            //TODO: Maybe add a settings to show product not available at a location or not.
-                            $query->orWhereNull('VLD.location_id');
-                        });;
+                        //Include Location
+                        if (!empty($location_id)) {
+                            $join->where(function ($query) use ($location_id) {
+                                $query->where('VLD.location_id', '=', $location_id);
+                                //Check null to show products even if no quantity is available in a location.
+                                //TODO: Maybe add a settings to show product not available at a location or not.
+                                $query->orWhereNull('VLD.location_id');
+                            });;
+                        }
                     }
-                }
-            )
-            ->orderBy("name");;
-        if (!empty($price_group_id)) {
-            $products->leftjoin(
-                'variation_group_prices AS VGP',
-                function ($join) use ($price_group_id) {
-                    $join->on('variations.id', '=', 'VGP.variation_id')
-                        ->where('VGP.price_group_id', '=', $price_group_id);
-                }
+                )
+                ->orderBy("name");;
+            if (!empty($price_group_id)) {
+                $products->leftjoin(
+                    'variation_group_prices AS VGP',
+                    function ($join) use ($price_group_id) {
+                        $join->on('variations.id', '=', 'VGP.variation_id')
+                            ->where('VGP.price_group_id', '=', $price_group_id);
+                    }
+                );
+            }
+            $products->where('products.business_id', $business_id)
+                ->where('products.type', '!=', 'modifier');
+
+            //Include search
+            if (false) {
+                $products->where(function ($query) use ($term) {
+                    $query->where('products.name', 'like', '%' . $term . '%');
+                    $query->orWhere('sku', 'like', '%' . $term . '%');
+                    $query->orWhere('sub_sku', 'like', '%' . $term . '%');
+                });
+            }
+
+
+            //Include check for quantity
+            if (false) {
+                $products->where('VLD.qty_available', '>', 0);
+            }
+
+            $products->select(
+                'products.id as product_id',
+                'products.name',
+                'products.our_price',
+                'products.second_name',
+                'products.product_description',
+                'products.type',
+                'products.product_custom_field1',
+                'products.product_custom_field2',
+                'products.product_custom_field3',
+                'products.product_custom_field4',
+                // 'products.product_custom_field1_price',
+                // 'products.product_custom_field2_price',
+                // 'products.product_custom_field3_price',
+                // 'products.product_custom_field4_price',
+                'products.enable_stock',
+                'variations.id as variation_id',
+                'variations.name as variation',
+                'VLD.qty_available',
+                'variations.sell_price_inc_tax as selling_price',
+                'variations.dpp_inc_tax as purchase_price',
+                'variations.sub_sku',
+                'U.short_name as unit',
+                'U.id as unit_id',
             );
-        }
-        $products->where('products.business_id', $business_id)
-            ->where('products.type', '!=', 'modifier');
+            if (!empty($price_group_id)) {
+                $products->addSelect('VGP.price_inc_tax as variation_group_price');
+            }
+            $result = $products->orderBy('VLD.qty_available', 'desc')
+                ->get();
 
-        //Include search
-        if (false) {
-            $products->where(function ($query) use ($term) {
-                $query->where('products.name', 'like', '%' . $term . '%');
-                $query->orWhere('sku', 'like', '%' . $term . '%');
-                $query->orWhere('sub_sku', 'like', '%' . $term . '%');
-            });
-        }
+            foreach ($result as $single_result) {
+                // $attributes = ProductHasAttributeStock::where('product_id', $single_result->product_id)->get();
+                $single_result['attributes'] = 'NA';
+                // if (!empty($attributes)) {
+                //     $single_result['attributes'] = $attributes;
+                // }
 
+                $product_quantity_discount_prices = ProductQuantityDiscountPrice::where('product_id', $single_result->product_id)->get();
+                $single_result['product_quantity_discount_prices'] = 'NA';
+                if (!empty($product_quantity_discount_prices)) {
+                    $single_result['product_quantity_discount_prices'] = $product_quantity_discount_prices;
+                }
 
-        //Include check for quantity
-        if (false) {
-            $products->where('VLD.qty_available', '>', 0);
-        }
-
-        $products->select(
-            'products.id as product_id',
-            'products.name',
-            'products.our_price',
-            'products.second_name',
-            'products.product_description',
-            'products.type',
-            'products.product_custom_field1',
-            'products.product_custom_field2',
-            'products.product_custom_field3',
-            'products.product_custom_field4',
-            'products.product_custom_field1_price',
-            'products.product_custom_field2_price',
-            'products.product_custom_field3_price',
-            'products.product_custom_field4_price',
-            'products.enable_stock',
-            'variations.id as variation_id',
-            'variations.name as variation',
-            'VLD.qty_available',
-            'variations.sell_price_inc_tax as selling_price',
-            'variations.dpp_inc_tax as purchase_price',
-            'variations.sub_sku',
-            'U.short_name as unit',
-            'U.id as unit_id',
-        );
-        if (!empty($price_group_id)) {
-            $products->addSelect('VGP.price_inc_tax as variation_group_price');
-        }
-        $result = $products->orderBy('VLD.qty_available', 'desc')
-            ->get();
-
-        foreach ($result as $single_result) {
-            $attributes = ProductHasAttributeStock::where('product_id', $single_result->product_id)->get();
-            $single_result['attributes'] = 'NA';
-            if (!empty($attributes)) {
-                $single_result['attributes'] = $attributes;
+                $single_result['sub_units'] = 'NA';
+                // $single_result['sub_units'] = $this->productUtil->getSubUnitsForUnit($single_result->unit_id, $business_id);
+                $single_result['variation_group_prices'] = VariationGroupPrice::where('variation_id', $single_result->variation_id)
+                    ->select('id', 'variation_id', 'price_group_id', 'price_inc_tax')->get();
             }
 
-            $product_quantity_discount_prices = ProductQuantityDiscountPrice::where('product_id', $single_result->product_id)->get();
-            $single_result['product_quantity_discount_prices'] = 'NA';
-            if (!empty($product_quantity_discount_prices)) {
-                $single_result['product_quantity_discount_prices'] = $product_quantity_discount_prices;
-            }
-
-            $single_result['sub_units'] = $this->productUtil->getSubUnitsForUnit($single_result->unit_id, $business_id);
-            $single_result['variation_group_prices'] = VariationGroupPrice::where('variation_id', $single_result->variation_id)
-                ->select('id', 'variation_id', 'price_group_id', 'price_inc_tax')->get();
+            return json_encode($result);
+        } catch (\Exception $e) {
+            return $e;
         }
-
-        return json_encode($result);
     }
 
     public function getProducts(Request $request)
@@ -596,18 +600,16 @@ class APIController extends Controller
     public function storePos(Request $request)
     {
 
-
         $is_direct_sale = true;
         if (!empty($request->input('is_direct_sale'))) {
             $is_direct_sale = true;
         }
 
-
         try {
             $input = $request->all();
 
             $input['is_quotation'] = 0;
-
+            
             if (!empty($input['products'])) {
                 $business_id = $request->get('business_id');
 
@@ -790,6 +792,7 @@ class APIController extends Controller
             }
 
             $output = $e;
+            return $output;
         }
 
         if (!$is_direct_sale) {
