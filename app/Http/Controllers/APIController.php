@@ -629,7 +629,6 @@ class APIController extends Controller
                 if (empty($request->input('transaction_date'))) {
                     $input['transaction_date'] = \Carbon::now();
                 } else {
-                    // $input['transaction_date'] = $this->productUtil->uf_date($request->input('transaction_date'), true);
                     $input['transaction_date'] = $request->input('transaction_date');
                 }
                 if ($is_direct_sale) {
