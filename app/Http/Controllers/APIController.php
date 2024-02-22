@@ -676,7 +676,7 @@ class APIController extends Controller
                 //add sale agent
                 $input['created_by'] = $request->get('created_by');
 
-                $transaction = $this->transactionUtil->createSellTransaction($business_id, $input, $invoice_total, $user_id);
+                $transaction = $this->transactionUtil->createSellTransactionAPI($business_id, $input, $invoice_total, $user_id);
 
 
                 $this->transactionUtil->createOrUpdateSellLines($transaction, $input['products'], $input['location_id']);
